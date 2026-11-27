@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SecureFL — Multi-Tenant Cloud Security &amp; Federated Learning SOC</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<!-- ==================== AUTHENTICATION MODAL ==================== -->
+<div id="login-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div style="text-align:center;margin-bottom:18px">
+      <div class="brand-logo" style="margin:0 auto 10px;width:48px;height:48px;font-size:24px">🛡️</div>
+      <h2 style="color:var(--text-bright);font-size:20px;font-weight:800">SecureFL Cloud Security</h2>
+      <p style="color:var(--muted);font-size:12px;margin-top:3px">Zero-Trust Multi-Tenant Isolation &amp; Federated Threat Intelligence</p>
+    </div>
+
+    <div class="modal-tabs">
+      <button class="modal-tab-btn active" id="tab-btn-signin" type="button">Sign In</button>
+      <button class="modal-tab-btn" id="tab-btn-register" type="button">Register</button>
+      <button class="modal-tab-btn" id="tab-btn-reset" type="button">Reset Password</button>
+    </div>
+
+    <div id="auth-alert" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:8px;font-size:12.5px"></div>
+
+    <!-- SIGN IN -->
+    <form id="form-signin">
+      <div class="form-group">
+        <label class="form-label">Username or Email</label>
+        <input id="login-username" type="text" class="form-input" placeholder="Enter username or Firebase email" required autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input id="login-password" type="password" class="form-input" placeholder="Enter your password" required autocomplete="current-password" />
+      </div>
+      <button id="btn-login" type="submit" class="btn btn-primary" style="width:100%;padding:10px;margin-top:6px">
+        Sign In Securely
+      </button>
+      <div style="margin-top:12px;font-size:11.5px;color:var(--muted);text-align:center">
+        Zero-trust enforcement: all registered accounts require administrator verification prior to login.
+      </div>
+    </form>
+
+    <!-- REGISTER (NO ADMIN ROLE ALLOWED) -->
+    <form id="form-register" style="display:none">
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input id="reg-fullname" type="text" class="form-input" placeholder="Jane Doe" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input id="reg-email" type="email" class="form-input" placeholder="jane@organization.io" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input id="reg-username" type="text" class="form-input" placeholder="jane_sec" required minlength="3" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password (min 8 characters)</label>
+        <input id="reg-password" type="password" class="form-input" placeholder="••••••••" required minlength="8" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tenant Organization</label>
+        <select id="reg-tenant-select" class="form-select" required></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Requested Role</label>
+        <select id="reg-role" class="form-select">
+          <option value="user">Tenant Member</option>
+          <option value="analyst">Security Analyst</option>
+        </select>
+      </div>
+      <button id="btn-register" type="submit" class="btn btn-primary" style="width:100%;padding:10px">
+        Submit for Admin Verification
+      </button>
+    </form>
+
+    <!-- PASSWORD RESET -->
+    <form id="form-reset" style="display:none">
+      <div class="form-group">
+        <label class="form-label">Registered Email Address</label>
+        <input id="reset-email" type="email" class="form-input" placeholder="you@organization.io" required />
+      </div>
+      <button id="btn-reset" type="submit" class="btn btn-primary" style="width:100%;padding:10px">
+        Send Password Reset Link
+      </button>
+    </form>
+
+    <div style="text-align:center;margin-top:14px;font-size:11.5px;color:var(--muted)">
+      Backend Gateway: <span id="auth-api-status">Checking connection…</span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MAIN SOC APPLICATION SHELL ==================== -->
+<div id="app-shell" class="app-shell" style="display:none">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand-box">
+      <div class="brand-logo">🛡️</div>
+      <div>
+        <div class="brand-title">SecureFL</div>
+        <span class="brand-sub">Multi-Tenant Cloud SOC</span>
+      </div>
+    </div>
+
+    <div class="nav-section-label">Monitoring &amp; AI</div>
+    <button class="nav-item active" data-page="overview"><span>1. Security Overview</span></button>
+    <button class="nav-item" data-page="threats"><span>2. Real-Time Threats &amp; ML</span></button>
+    <button class="nav-item" data-page="history"><span>3. Attack History</span></button>
+    <button class="nav-item" data-page="benchmarks"><span>4. Model Performance</span></button>
+    <button class="nav-item" data-page="fl"><span>5. Flower FL Monitor</span></button>
+    <button class="nav-item" data-page="privacy"><span>6. Differential Privacy</span></button>
+    <button class="nav-item" data-page="xai"><span>7. Explainable AI (XAI)</span></button>
+
+    <div class="nav-section-label">Defense &amp; Isolation</div>
+    <button class="nav-item" data-page="responses"><span>8. Response Center</span><span id="nav-resp-badge" class="nav-pill" style="display:none">0</span></button>
+    <button class="nav-item" data-page="isolation"><span>9. Isolation &amp; AES Vault</span></button>
+    <button class="nav-item admin-only" data-page="users"><span>10. Users &amp; RBAC</span><span id="nav-pending-badge" class="nav-pill" style="display:none">0</span></button>
+    <button class="nav-item" data-page="audit"><span>11. Audit &amp; PDF Reports</span></button>
+    <button class="nav-item" data-page="cicd"><span>12. DevSecOps CI/CD</span></button>
+    <button class="nav-item" data-page="firebase"><span>13. Firebase Status</span></button>
+    <button class="nav-item" data-page="settings"><span>14. Settings &amp; Tenant Hub</span></button>
+  </aside>
+
+  <div class="main-wrap">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="btn-mobile-menu" class="btn btn-outline btn-sm" type="button">☰</button>
+        <div id="live-pill" class="live-pill">
+          <span class="live-dot"></span>
+          <span id="live-pill-text">Telemetry Stream Ready</span>
+        </div>
+        <span id="firebase-mode-chip" class="badge medium">Mode: Local</span>
+      </div>
+      <div class="topbar-right">
+        <button id="btn-theme-toggle" class="btn btn-outline btn-sm" type="button">☀️ Light / 🌙 Dark</button>
+        <div class="mono" style="font-size:12px;color:var(--text-bright)" id="topbar-user-info">—</div>
+        <button id="btn-logout" class="btn btn-secondary btn-sm" type="button">Sign Out</button>
+      </div>
+    </header>
+
+    <main class="content-area">
+      <!-- 1. OVERVIEW -->
+      <section id="page-overview" class="page active">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Security Operations Overview</div>
+            <div class="page-subtitle">Real-time multi-tenant threat detection, Flower FL accuracy, and RDP privacy budget</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="btn-ov-fl" class="btn btn-primary btn-sm admin-only" type="button">▶ Run Flower FL Round</button>
+            <button id="btn-ov-sim" class="btn btn-danger btn-sm analyst-up" type="button">⚡ Inject Synthetic Attack</button>
+            <button id="btn-ov-refresh" class="btn btn-outline btn-sm" type="button">Refresh</button>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card danger"><div class="stat-label">Threat Alerts</div><div class="stat-value" id="stat-threats">—</div><div class="stat-delta">Tenant-scoped / Global</div></div>
+          <div class="stat-card success"><div class="stat-label">Active Tenants</div><div class="stat-value" id="stat-tenants">—</div><div class="stat-delta">HKDF AES-256-GCM</div></div>
+          <div class="stat-card warning"><div class="stat-label">Pending Approvals</div><div class="stat-value" id="stat-pending">—</div><div class="stat-delta" id="stat-resp-pending">Responses: 0</div></div>
+          <div class="stat-card"><div class="stat-label">FL Rounds / Acc</div><div class="stat-value" id="stat-fl">—</div><div class="stat-delta" id="stat-fl-acc">Accuracy: —</div></div>
+          <div class="stat-card"><div class="stat-label">RDP Budget (ε)</div><div class="stat-value" id="stat-eps">—</div><div class="stat-delta">Moments Accountant</div></div>
+        </div>
+        <div class="two-col">
+          <div class="card">
+            <div class="card-header"><div class="card-title">Threat Severity Breakdown</div></div>
+            <div style="display:flex;align-items:center;gap:22px;flex-wrap:wrap">
+              <svg id="donut-chart" width="160" height="160" viewBox="0 0 160 160"></svg>
+              <div id="donut-legend" style="flex:1;min-width:140px;display:flex;flex-direction:column;gap:8px"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">Live Authenticated Telemetry Stream</div><span class="badge verified">Bearer SSE</span></div>
+            <div id="sse-feed" class="live-feed"><div style="color:var(--muted);padding:16px;text-align:center">Listening for live events…</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Recent Security Alerts</div></div>
+          <div class="table-wrap"><table><thead><tr><th>Time</th><th>Tenant</th><th>Threat</th><th>Severity</th><th>Confidence</th><th>Model</th><th>Status</th></tr></thead><tbody id="ov-threats-tbody"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- 2. REAL-TIME THREATS & ML ANALYZER -->
+      <section id="page-threats" class="page">
+        <div class="page-header">
+          <div><div class="page-title">Real-Time Threat Detection &amp; ML Inference</div><div class="page-subtitle">Analyze live telemetry with LSTM / Random Forest / XGBoost + Autoencoder + XAI</div></div>
+        </div>
+        <div class="two-col">
+          <div class="card">
+            <div class="card-header"><div class="card-title">Live Telemetry ML Analyzer</div><span class="badge medium">Real Inference</span></div>
+            <form id="form-analyze">
+              <div class="filter-bar">
+                <select id="analyze-model" class="form-select" style="max-width:180px">
+                  <option value="lstm">PyTorch LSTM</option>
+                  <option value="xgboost">XGBoost</option>
+                  <option value="random_forest">Random Forest</option>
+                </select>
+                <select id="analyze-preset" class="form-select" style="max-width:220px">
+                  <option value="brute_force">Preset: Brute Force Burst</option>
+                  <option value="exfil">Preset: Data Exfiltration</option>
+                  <option value="cross_tenant">Preset: Cross-Tenant Probe</option>
+                  <option value="normal">Preset: Normal Traffic</option>
+                </select>
+              </div>
+              <div class="two-col" style="margin-bottom:10px;gap:10px">
+                <div><label class="form-label">Failed Logins</label><input id="f-failed" type="number" class="form-input" value="24" /></div>
+                <div><label class="form-label">Req Freq (/min)</label><input id="f-freq" type="number" class="form-input" value="180" /></div>
+                <div><label class="form-label">Bytes Out (KB)</label><input id="f-bytes" type="number" class="form-input" value="420" /></div>
+                <div><label class="form-label">Cross-Tenant Probes</label><input id="f-cross" type="number" class="form-input" value="0" /></div>
+                <div><label class="form-label">Secrets Detected</label><input id="f-secrets" type="number" class="form-input" value="0" /></div>
+                <div><label class="form-label">Privilege Level (1-3)</label><input id="f-priv" type="number" class="form-input" value="1" min="1" max="3" /></div>
+              </div>
+              <button type="submit" class="btn btn-primary">Analyze Telemetry &amp; Run XAI</button>
+            </form>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">Inference &amp; XAI Output</div></div>
+            <div id="analyze-result-box" style="color:var(--muted)">Submit telemetry to inspect prediction, anomaly score, and top SHAP/gradient attributions.</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Active Alerts Queue</div></div>
+          <div class="table-wrap"><table><thead><tr><th>Time</th><th>Tenant</th><th>Threat</th><th>Severity</th><th>Conf</th><th>Source IP</th><th>Status</th><th>Actions</th></tr></thead><tbody id="threats-tbody"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- 3. ATTACK HISTORY -->
+      <section id="page-history" class="page">
+        <div class="page-header"><div><div class="page-title">Attack History &amp; Forensics</div><div class="page-subtitle">Filterable multi-tenant historical alert records</div></div></div>
+        <div class="card">
+          <div class="filter-bar">
+            <select id="hist-status" class="form-select" style="max-width:170px"><option value="">All Statuses</option><option value="open">Open</option><option value="acknowledged">Acknowledged</option><option value="resolved">Resolved</option></select>
+            <input id="hist-search" class="form-input" style="max-width:260px" placeholder="Filter by threat type or IP…" />
+            <button id="btn-hist-refresh" class="btn btn-outline btn-sm" type="button">Apply Filter</button>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Timestamp</th><th>Tenant</th><th>Threat Type</th><th>Confidence</th><th>Anomaly</th><th>IP</th><th>Description</th><th>Status</th></tr></thead><tbody id="history-tbody"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- 4. MODEL PERFORMANCE -->
+      <section id="page-benchmarks" class="page">
+        <div class="page-header">
+          <div><div class="page-title">Model Performance Comparison</div><div class="page-subtitle">Empirical comparison: Federated LSTM vs. Random Forest vs. XGBoost</div></div>
+          <button id="btn-run-bench" class="btn btn-primary btn-sm admin-only" type="button">Run Benchmark Suite</button>
+        </div>
+        <div class="two-col">
+          <div class="card"><div class="card-header"><div class="card-title">Accuracy &amp; F1 Comparison</div></div><svg id="bench-svg" width="100%" height="220" viewBox="0 0 500 220"></svg></div>
+          <div class="card"><div class="card-header"><div class="card-title">Latest Confusion Matrix (5 Threat Classes)</div></div><div id="cm-container" style="overflow-x:auto"></div></div>
+        </div>
+        <div class="card">
+          <div class="table-wrap"><table><thead><tr><th>Model</th><th>Scope</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1-Score</th><th>FPR</th><th>Latency (ms)</th></tr></thead><tbody id="bench-tbody"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- 5. FLOWER FL MONITOR -->
+      <section id="page-fl" class="page">
+        <div class="page-header">
+          <div><div class="page-title">Flower Federated Learning Monitor</div><div class="page-subtitle">5 isolated tenant clients, Byzantine-robust aggregation, and global model checkpoints</div></div>
+        </div>
+        <div class="card admin-only">
+          <div class="card-header"><div class="card-title">Execute Real Flower FL Training Round</div></div>
+          <form id="form-fl-trigger" class="filter-bar">
+            <select id="fl-strategy" class="form-select" style="max-width:160px"><option value="krum">Krum (Byzantine-Robust)</option><option value="trimmed_mean">Trimmed Mean</option><option value="fedavg">FedAvg</option></select>
+            <input id="fl-rounds-count" type="number" class="form-input" style="max-width:100px" value="1" min="1" max="5" title="Rounds" />
+            <input id="fl-sigma" type="number" step="0.1" class="form-input" style="max-width:110px" value="1.2" min="0.2" max="5.0" title="DP Noise Multiplier" />
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input id="fl-byzantine" type="checkbox" /> Inject Byzantine Poisoning Client</label>
+            <button type="submit" class="btn btn-primary btn-sm">▶ Train FL Round</button>
+          </form>
+        </div>
+        <div class="two-col">
+          <div class="card"><div class="card-header"><div class="card-title">FL Accuracy Convergence</div></div><svg id="fl-trend-svg" width="100%" height="210" viewBox="0 0 500 210"></svg></div>
+          <div class="card"><div class="card-header"><div class="card-title">Participating Tenant FL Nodes (5)</div></div><div id="fl-clients-list" class="live-feed"></div></div>
+        </div>
+        <div class="card">
+          <div class="table-wrap"><table><thead><tr><th>Round</th><th>Strategy</th><th>Accuracy</th><th>Loss</th><th>RDP ε</th><th>Accepted</th><th>Rejected (Byzantine)</th><th>Timestamp</th></tr></thead><tbody id="fl-rounds-tbody"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- 6. DIFFERENTIAL PRIVACY -->
+      <section id="page-privacy" class="page">
+        <div class="page-header"><div><div class="page-title">Differential Privacy Monitoring</div><div class="page-subtitle">Validated Rényi Differential Privacy (RDP) Moments Accountant &amp; per-round budget tracking</div></div></div>
+        <div class="two-col">
+          <div class="card" style="text-align:center">
+            <div class="card-header"><div class="card-title">Cumulative Privacy Budget (ε)</div></div>
+            <svg id="gauge-svg" width="220" height="145" viewBox="0 0 200 130"></svg>
+            <div id="dp-summary-text" style="font-size:12.5px;color:var(--muted);margin-top:6px">—</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">Active Privacy Parameters</div></div>
+            <div id="dp-params-box" style="display:grid;gap:8px;font-size:13px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-wrap"><table><thead><tr><th>Round</th><th>Accountant</th><th>Noise Multiplier σ</th><th>Clip Norm C</th><th>Round ε</th><th>Cumulative ε</th><th>δ</th><th>Status</th></tr></thead><tbody id="dp-history-tbody"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- 7. EXPLAINABLE AI -->
+      <section id="page-xai" class="page">
+        <div class="page-header"><div><div class="page-title">Explainable AI (XAI) Threat Inspector</div><div class="page-subtitle">Feature attribution breakdown, anomaly score, and recommended security actions</div></div></div>
+        <div class="card">
+          <div class="filter-bar">
+            <select id="xai-alert-select" class="form-select" style="max-width:420px"></select>
+            <button id="btn-xai-load" class="btn btn-primary btn-sm" type="button">Inspect Explanation</button>
+          </div>
+          <div id="xai-detail-box" style="margin-top:14px;color:var(--muted)">Select a threat alert to view SHAP / gradient attributions.</div>
+        </div>
+      </section>
+
+      <!-- 8. SECURITY RESPONSE CENTER -->
+      <section id="page-responses" class="page">
+        <div class="page-header"><div><div class="page-title">Security Response Center</div><div class="page-subtitle">Automated incident escalation with mandatory Administrator Approval Gate for high-impact actions</div></div></div>
+        <div class="card">
+          <div class="table-wrap"><table><thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Requires Approval</th><th>Status</th><th>Approved By</th><th>Decision</th></tr></thead><tbody id="responses-tbody"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- 9. ISOLATION & AES VAULT -->
+      <section id="page-isolation" class="page">
+        <div class="page-header"><div><div class="page-title">Multi-Tenant Isolation &amp; AES-256-GCM Vault</div><div class="page-subtitle">Real cross-tenant isolation probe, HKDF key fingerprints, and encrypted storage archives</div></div></div>
+        <div class="two-col">
+          <div class="card">
+            <div class="card-header"><div class="card-title">Active Tenant Cryptographic Boundary</div></div>
+            <div id="iso-tenant-card">Loading…</div>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+              <button id="btn-iso-probe" class="btn btn-primary btn-sm" type="button">Run Real Cross-Tenant Probe</button>
+              <button id="btn-rotate-key" class="btn btn-outline btn-sm" type="button">Rotate HKDF Key Version</button>
+            </div>
+            <div id="iso-probe-result" class="crypto-box" style="display:none"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">AES-256-GCM Encrypted Log Archive</div></div>
+            <form id="form-archive">
+              <div class="form-group"><label class="form-label">Archive Filename</label><input id="arch-name" class="form-input" value="soc-evidence.json" required /></div>
+              <div class="form-group"><label class="form-label">Sensitive JSON Payload</label><textarea id="arch-payload" class="form-textarea" rows="3">{"note":"Tenant confidential telemetry snapshot","classification":"RESTRICTED"}</textarea></div>
+              <button type="submit" class="btn btn-primary btn-sm">Encrypt &amp; Upload Archive</button>
+            </form>
+            <div id="archives-list" style="margin-top:12px;font-size:12px"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 10. USERS & RBAC (ADMIN) -->
+      <section id="page-users" class="page">
+        <div class="page-header">
+          <div><div class="page-title">User &amp; Role Governance</div><div class="page-subtitle">Approve pending accounts, assign tenants/roles, and revoke active sessions</div></div>
+          <button id="btn-open-add-tenant" class="btn btn-outline btn-sm" type="button">+ Provision Tenant</button>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Pending User Verification Queue</div></div>
+          <div class="table-wrap"><table><thead><tr><th>Username</th><th>Email</th><th>Tenant</th><th>Requested Role</th><th>Actions</th></tr></thead><tbody id="pending-users-tbody"></tbody></table></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">All Platform Accounts</div></div>
+          <div class="table-wrap"><table><thead><tr><th>Username</th><th>Tenant</th><th>Role</th><th>Verified</th><th>Status</th><th>Actions</th></tr></thead><tbody id="all-users-tbody"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- 11. AUDIT & REPORTS -->
+      <section id="page-audit" class="page">
+        <div class="page-header">
+          <div><div class="page-title">Immutable Audit Trail &amp; Reports</div><div class="page-subtitle">Tamper-evident audit logs with SHA-256 integrity hashes &amp; authenticated report downloads</div></div>
+          <div style="display:flex;gap:8px">
+            <button id="btn-export-csv" class="btn btn-outline btn-sm" type="button">Download CSV</button>
+            <button id="btn-export-pdf" class="btn btn-primary btn-sm" type="button">Download PDF Report</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-wrap"><table><thead><tr><th>Timestamp</th><th>Event</th><th>Severity</th><th>Actor</th><th>SHA-256 Hash</th><th>Details</th></tr></thead><tbody id="audit-tbody"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- 12. DEVSECOPS CI/CD -->
+      <section id="page-cicd" class="page">
+        <div class="page-header"><div><div class="page-title">DevSecOps CI/CD Security Gates</div><div class="page-subtitle">Blocking SAST, secret scanning, CVE audit, SBOM, Cosign, and gate evaluation</div></div></div>
+        <div class="two-col">
+          <div class="card">
+            <div class="card-header"><div class="card-title">Live Scanner &amp; Pipeline Posture</div></div>
+            <div id="cicd-status-box">Loading…</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">Evaluate Deployment Gate</div></div>
+            <form id="form-cicd">
+              <div class="form-group"><label class="form-label">Repository</label><input id="cicd-repo" class="form-input" value="securefl-api" required /></div>
+              <div class="form-group"><label class="form-label">Commit SHA</label><input id="cicd-sha" class="form-input" value="a9c4e12f" required /></div>
+              <div class="two-col" style="gap:10px;margin-bottom:10px">
+                <div><label class="form-label">Secrets Found</label><input id="cicd-secrets" type="number" class="form-input" value="0" min="0" /></div>
+                <div><label class="form-label">CVEs Found</label><input id="cicd-vulns" type="number" class="form-input" value="0" min="0" /></div>
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm">Run Gate Check</button>
+            </form>
+            <div id="cicd-result" style="margin-top:12px"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 13. FIREBASE STATUS -->
+      <section id="page-firebase" class="page">
+        <div class="page-header"><div><div class="page-title">Firebase Cloud Backend Status</div><div class="page-subtitle">Auth, Cloud Firestore (11 collections), Storage, Hosting, App Check, &amp; Emulator status</div></div></div>
+        <div class="card" id="firebase-status-card">Loading…</div>
+      </section>
+
+      <!-- 14. SYSTEM SETTINGS & TENANT HUB -->
+      <section id="page-settings" class="page">
+        <div class="page-header"><div><div class="page-title">Platform Settings &amp; Tenant Hub</div><div class="page-subtitle">Privacy budget, FL strategy, rate limits, and isolated tenant workspace summary</div></div></div>
+        <div class="card">
+          <form id="form-settings">
+            <div class="two-col" style="gap:12px">
+              <div class="form-group"><label class="form-label">DP Epsilon Budget</label><input id="set-eps" type="number" step="0.5" class="form-input" value="10.0" /></div>
+              <div class="form-group"><label class="form-label">DP Noise Multiplier σ</label><input id="set-sigma" type="number" step="0.1" class="form-input" value="1.2" /></div>
+              <div class="form-group"><label class="form-label">Default FL Strategy</label><select id="set-strat" class="form-select"><option value="krum">krum</option><option value="trimmed_mean">trimmed_mean</option><option value="fedavg">fedavg</option></select></div>
+              <div class="form-group"><label class="form-label">Auth Rate Limit (/min)</label><input id="set-rate" type="number" class="form-input" value="20" /></div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm admin-only">Save Platform Settings</button>
+          </form>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- Add Tenant Modal -->
+<div id="modal-add-tenant" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h3 style="color:var(--text-bright);margin-bottom:10px">Provision Isolated Tenant</h3>
+    <form id="form-add-tenant">
+      <div class="form-group"><label class="form-label">Tenant Name</label><input id="new-tenant-name" class="form-input" placeholder="Tenant Zeta (FinTech)" required /></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button id="btn-cancel-tenant" type="button" class="btn btn-secondary btn-sm">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Create Tenant</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

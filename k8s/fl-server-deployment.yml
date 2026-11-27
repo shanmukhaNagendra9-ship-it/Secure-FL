@@ -1,0 +1,330 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# FL Server Deployment
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fl-server
+  namespace: multi-tenant-fl
+  labels:
+    app: fl-server
+    component: federated-learning
+    tier: backend
+    version: "1.0.0"
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    description: "Federated Learning aggregation server with differential privacy"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fl-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: fl-server
+        component: federated-learning
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: fl-server-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Prefer to schedule on nodes with federated-learning=true label
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload-type
+                    operator: In
+                    values:
+                      - federated-learning
+
+      containers:
+        - name: fl-server
+          image: IMAGE_PLACEHOLDER_FL_SERVER
+          imagePullPolicy: Always
+          command: ["python", "server.py"]
+
+          ports:
+            - name: grpc
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 8081
+              protocol: TCP
+
+          env:
+            - name: NUM_ROUNDS
+              valueFrom:
+                configMapKeyRef:
+                  name: fl-server-config
+                  key: num_rounds
+            - name: MIN_CLIENTS
+              valueFrom:
+                configMapKeyRef:
+                  name: fl-server-config
+                  key: min_clients
+            - name: PRIVACY_EPSILON
+              valueFrom:
+                configMapKeyRef:
+                  name: fl-server-config
+                  key: privacy_epsilon
+            - name: PRIVACY_DELTA
+              valueFrom:
+                configMapKeyRef:
+                  name: fl-server-config
+                  key: privacy_delta
+            - name: SERVER_ADDRESS
+              value: "0.0.0.0:8080"
+            - name: METRICS_PORT
+              value: "8081"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: fl-server-secrets
+                  key: database_url
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost',8080)); s.close()"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost',8080)); s.close()"
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          startupProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost',8080)); s.close()"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+
+          volumeMounts:
+            - name: fl-models
+              mountPath: /app/models
+            - name: fl-metrics
+              mountPath: /app/metrics
+            - name: tmp
+              mountPath: /tmp
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+      volumes:
+        - name: fl-models
+          persistentVolumeClaim:
+            claimName: fl-models-pvc
+        - name: fl-metrics
+          persistentVolumeClaim:
+            claimName: fl-metrics-pvc
+        - name: tmp
+          emptyDir: {}
+
+      terminationGracePeriodSeconds: 60
+
+---
+# ServiceAccount for FL Server
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fl-server-sa
+  namespace: multi-tenant-fl
+  labels:
+    app: fl-server
+automountServiceAccountToken: false
+
+---
+# ConfigMap for FL Server
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fl-server-config
+  namespace: multi-tenant-fl
+  labels:
+    app: fl-server
+data:
+  num_rounds: "10"
+  min_clients: "3"
+  privacy_epsilon: "1.0"
+  privacy_delta: "1e-5"
+
+---
+# Service for FL Server (ClusterIP — internal only)
+apiVersion: v1
+kind: Service
+metadata:
+  name: fl-server
+  namespace: multi-tenant-fl
+  labels:
+    app: fl-server
+    component: federated-learning
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8081"
+spec:
+  type: ClusterIP
+  selector:
+    app: fl-server
+  ports:
+    - name: grpc
+      port: 8080
+      targetPort: grpc
+      protocol: TCP
+    - name: metrics
+      port: 8081
+      targetPort: metrics
+      protocol: TCP
+
+---
+# PersistentVolumeClaim: FL Models storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fl-models-pvc
+  namespace: multi-tenant-fl
+  labels:
+    app: fl-server
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+---
+# PersistentVolumeClaim: FL Metrics storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fl-metrics-pvc
+  namespace: multi-tenant-fl
+  labels:
+    app: fl-server
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+
+---
+# NetworkPolicy: FL Server receives connections only from tenant clients and api-gateway
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fl-server-netpol
+  namespace: multi-tenant-fl
+  labels:
+    app: fl-server
+spec:
+  podSelector:
+    matchLabels:
+      app: fl-server
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Allow gRPC from tenant clients
+    - from:
+        - podSelector:
+            matchLabels:
+              component: tenant-client
+      ports:
+        - port: 8080
+          protocol: TCP
+    # Allow from api-gateway
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - port: 8080
+          protocol: TCP
+    # Allow Prometheus scraping
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 8081
+          protocol: TCP
+
+  egress:
+    # Allow DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow connection to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+          protocol: TCP

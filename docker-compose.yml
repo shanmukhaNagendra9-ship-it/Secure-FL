@@ -1,0 +1,258 @@
+﻿services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: securefl-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-multi_tenant_fl}
+      POSTGRES_USER: ${POSTGRES_USER:-fluser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securefl_dev_pg_pass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fluser} -d ${POSTGRES_DB:-multi_tenant_fl}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend-network
+    security_opt:
+      - no-new-privileges:true
+
+  fl-server:
+    build:
+      context: .
+      dockerfile: federated_learning/Dockerfile
+      target: production
+    container_name: securefl-fl-server
+    restart: unless-stopped
+    command: ["python", "-m", "federated_learning.server", "--rounds", "${FL_NUM_ROUNDS:-5}", "--min_clients", "${FL_MIN_CLIENTS:-5}", "--strategy", "${FL_STRATEGY:-krum}"]
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      FL_NUM_ROUNDS: ${FL_NUM_ROUNDS:-5}
+      FL_MIN_CLIENTS: ${FL_MIN_CLIENTS:-5}
+      FL_STRATEGY: ${FL_STRATEGY:-krum}
+      DP_NOISE_MULTIPLIER: ${DP_NOISE_MULTIPLIER:-1.2}
+      PRIVACY_DELTA: ${PRIVACY_DELTA:-1e-5}
+    volumes:
+      - ./models:/app/models
+      - ./metrics:/app/metrics
+    networks:
+      - fl-network
+      - monitoring-network
+    security_opt:
+      - no-new-privileges:true
+
+  tenant-a-client:
+    build:
+      context: .
+      dockerfile: federated_learning/Dockerfile
+      target: production
+    container_name: securefl-tenant-a
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0 if 'federated_learning.client' in open('/proc/1/cmdline').read() else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    command: ["python", "-m", "federated_learning.client", "--tenant_id", "tenant_a", "--server_address", "fl-server:8080"]
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - fl-server
+    networks:
+      - fl-network
+    security_opt:
+      - no-new-privileges:true
+
+  tenant-b-client:
+    build:
+      context: .
+      dockerfile: federated_learning/Dockerfile
+      target: production
+    container_name: securefl-tenant-b
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0 if 'federated_learning.client' in open('/proc/1/cmdline').read() else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    command: ["python", "-m", "federated_learning.client", "--tenant_id", "tenant_b", "--server_address", "fl-server:8080"]
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - fl-server
+    networks:
+      - fl-network
+    security_opt:
+      - no-new-privileges:true
+
+  tenant-c-client:
+    build:
+      context: .
+      dockerfile: federated_learning/Dockerfile
+      target: production
+    container_name: securefl-tenant-c
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0 if 'federated_learning.client' in open('/proc/1/cmdline').read() else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    command: ["python", "-m", "federated_learning.client", "--tenant_id", "tenant_c", "--server_address", "fl-server:8080"]
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - fl-server
+    networks:
+      - fl-network
+    security_opt:
+      - no-new-privileges:true
+
+  tenant-d-client:
+    build:
+      context: .
+      dockerfile: federated_learning/Dockerfile
+      target: production
+    container_name: securefl-tenant-d
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0 if 'federated_learning.client' in open('/proc/1/cmdline').read() else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    command: ["python", "-m", "federated_learning.client", "--tenant_id", "tenant_d", "--server_address", "fl-server:8080"]
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - fl-server
+    networks:
+      - fl-network
+    security_opt:
+      - no-new-privileges:true
+
+  tenant-e-client:
+    build:
+      context: .
+      dockerfile: federated_learning/Dockerfile
+      target: production
+    container_name: securefl-tenant-e
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0 if 'federated_learning.client' in open('/proc/1/cmdline').read() else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    command: ["python", "-m", "federated_learning.client", "--tenant_id", "tenant_e", "--server_address", "fl-server:8080"]
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - fl-server
+    networks:
+      - fl-network
+    security_opt:
+      - no-new-privileges:true
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: production
+    container_name: securefl-api-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fluser}:${POSTGRES_PASSWORD:-securefl_dev_pg_pass}@postgres:5432/${POSTGRES_DB:-multi_tenant_fl}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
+      TENANT_MASTER_KEY: ${TENANT_MASTER_KEY:-}
+      FIREBASE_ENABLED: ${FIREBASE_ENABLED:-false}
+      FIREBASE_USE_EMULATOR: ${FIREBASE_USE_EMULATOR:-false}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000,http://localhost:5000}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    volumes:
+      - ./models:/app/models
+      - ./metrics:/app/metrics
+      - ./data:/app/data
+      - ./artifacts:/app/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend-network
+      - fl-network
+      - monitoring-network
+    security_opt:
+      - no-new-privileges:true
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: securefl-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - backend-network
+    security_opt:
+      - no-new-privileges:true
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: securefl-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - monitoring-network
+    security_opt:
+      - no-new-privileges:true
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: securefl-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change_me_grafana_password}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring-network
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  fl-network:
+    driver: bridge
+  backend-network:
+    driver: bridge
+  monitoring-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+

@@ -1,0 +1,144 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Zero-Trust Multi-Tenant Cloud Network Isolation Policies
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: multi-tenant-fl
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Allow DNS resolution from all pods in namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kube-dns
+  namespace: multi-tenant-fl
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Tenant A Isolation Policy:
+# Tenant A can ONLY egress to fl-server (port 8080).
+# Ingress from any other tenant (Tenant B or C) is strictly blocked.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-a-isolation-policy
+  namespace: multi-tenant-fl
+spec:
+  podSelector:
+    matchLabels:
+      tenant: tenant-a
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []  # No inbound network connections permitted
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: fl-server
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Tenant B Isolation Policy:
+# Tenant B can ONLY egress to fl-server (port 8080).
+# Ingress from Tenant A or C is blocked.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-b-isolation-policy
+  namespace: multi-tenant-fl
+spec:
+  podSelector:
+    matchLabels:
+      tenant: tenant-b
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: fl-server
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Tenant C Isolation Policy:
+# Tenant C can ONLY egress to fl-server (port 8080).
+# Ingress from Tenant A or B is blocked.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-c-isolation-policy
+  namespace: multi-tenant-fl
+spec:
+  podSelector:
+    matchLabels:
+      tenant: tenant-c
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: fl-server
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# FL Server Policy:
+# Ingress only allowed from authenticated tenant client pods and API gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fl-server-network-policy
+  namespace: multi-tenant-fl
+spec:
+  podSelector:
+    matchLabels:
+      app: fl-server
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: tenant-fl-client
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: tenant-fl-client
+      ports:
+        - protocol: TCP
+          port: 8080

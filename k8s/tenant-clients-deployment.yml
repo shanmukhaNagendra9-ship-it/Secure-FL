@@ -1,0 +1,135 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Tenant FL Clients Deployments (Isolated Workspaces)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tenant-a-client
+  namespace: multi-tenant-fl
+  labels:
+    app: tenant-fl-client
+    tenant: tenant-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tenant-fl-client
+      tenant: tenant-a
+  template:
+    metadata:
+      labels:
+        app: tenant-fl-client
+        tenant: tenant-a
+    spec:
+      containers:
+        - name: client
+          image: multi-tenant/fl-client:latest
+          command:
+            - python
+            - -m
+            - federated_learning.client
+            - --tenant_id
+            - tenant_a
+            - --server_address
+            - fl-server-service:8080
+            - --epochs
+            - "3"
+          env:
+            - name: TENANT_ID
+              value: "tenant_a"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1500m"
+              memory: "2Gi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tenant-b-client
+  namespace: multi-tenant-fl
+  labels:
+    app: tenant-fl-client
+    tenant: tenant-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tenant-fl-client
+      tenant: tenant-b
+  template:
+    metadata:
+      labels:
+        app: tenant-fl-client
+        tenant: tenant-b
+    spec:
+      containers:
+        - name: client
+          image: multi-tenant/fl-client:latest
+          command:
+            - python
+            - -m
+            - federated_learning.client
+            - --tenant_id
+            - tenant_b
+            - --server_address
+            - fl-server-service:8080
+            - --epochs
+            - "3"
+          env:
+            - name: TENANT_ID
+              value: "tenant_b"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1500m"
+              memory: "2Gi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tenant-c-client
+  namespace: multi-tenant-fl
+  labels:
+    app: tenant-fl-client
+    tenant: tenant-c
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tenant-fl-client
+      tenant: tenant-c
+  template:
+    metadata:
+      labels:
+        app: tenant-fl-client
+        tenant: tenant-c
+    spec:
+      containers:
+        - name: client
+          image: multi-tenant/fl-client:latest
+          command:
+            - python
+            - -m
+            - federated_learning.client
+            - --tenant_id
+            - tenant_c
+            - --server_address
+            - fl-server-service:8080
+            - --epochs
+            - "3"
+          env:
+            - name: TENANT_ID
+              value: "tenant_c"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1500m"
+              memory: "2Gi"

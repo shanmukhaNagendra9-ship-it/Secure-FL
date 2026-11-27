@@ -1,0 +1,51 @@
+{
+  "title": "SecureFL Multi-Tenant Security & Federated Learning",
+  "uid": "securefl-soc-v3",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Global FL Model Accuracy",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "fl_global_accuracy", "legendFormat": "Accuracy" }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Cumulative DP Epsilon Spent",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "fl_privacy_epsilon_spent", "legendFormat": "Epsilon" }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Cross-Tenant Access Violations Blocked",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "targets": [{ "expr": "sum(security_cross_tenant_access_denied_total)", "legendFormat": "Blocked" }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Byzantine Updates Filtered",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "targets": [{ "expr": "fl_byzantine_filtered_updates_total", "legendFormat": "Filtered" }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Threat Alerts Rate by Severity",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [{ "expr": "sum by (severity) (rate(threat_alerts_total[5m]))", "legendFormat": "{{severity}}" }]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "API Gateway Request Latency (p95)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(securefl_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95 Latency" }]
+    }
+  ]
+}

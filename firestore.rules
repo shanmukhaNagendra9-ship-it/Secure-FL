@@ -1,0 +1,183 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Security Helper Functions (Zero-Trust & Multi-Tenant Isolation)
+    // -------------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDocExists() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isVerifiedActive() {
+      return isSignedIn() &&
+        (
+          (request.auth.token.is_verified == true && request.auth.token.is_active != false) ||
+          (userDocExists() && userDoc().isVerified == true && userDoc().isActive == true)
+        );
+    }
+
+    function currentRole() {
+      return request.auth.token.role != null
+        ? request.auth.token.role
+        : (userDocExists() ? userDoc().role : 'user');
+    }
+
+    function currentTenantId() {
+      return request.auth.token.tenant_id != null
+        ? request.auth.token.tenant_id
+        : (userDocExists() ? userDoc().tenantId : '');
+    }
+
+    function isAdmin() {
+      return isVerifiedActive() && currentRole() == 'admin';
+    }
+
+    function isAnalyst() {
+      return isVerifiedActive() && (currentRole() == 'analyst' || currentRole() == 'admin');
+    }
+
+    function isTenantMember(tenantId) {
+      return isVerifiedActive() && (
+        currentTenantId() == tenantId ||
+        exists(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid))
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // 1. Users Collection (users/{uid})
+    // -------------------------------------------------------------------------
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Self-registration may ONLY create an unverified standard 'user' record;
+      // privilege fields cannot be self-elevated.
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.role == 'user'
+        && request.resource.data.isVerified == false
+        && request.resource.data.isActive == true
+        && request.resource.data.tenantId is string
+        && request.resource.data.tenantId.size() > 0;
+
+      // Users may only update safe profile metadata; role/tenantId/isVerified/isActive
+      // can only be changed by trusted backend Admin SDK or verified admin.
+      allow update: if isAdmin() || (
+        isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt'])
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. Tenants Collection (tenants/{tenantId}) & Tenant-Scoped Subcollections
+    //    NOTE: Raw encryption keys are NEVER stored in Firestore.
+    // -------------------------------------------------------------------------
+    match /tenants/{tenantId} {
+      allow read: if isAdmin() || isTenantMember(tenantId);
+      allow create, update, delete: if isAdmin()
+        && !('encryptionKey' in request.resource.data)
+        && !('encryption_key' in request.resource.data);
+
+      // 3. Tenant Members Subcollection
+      match /members/{uid} {
+        allow read: if isAdmin() || (isTenantMember(tenantId) && request.auth.uid == uid);
+        allow write: if isAdmin();
+      }
+
+      // 4. ML Threat Events Subcollection
+      match /threat_events/{eventId} {
+        allow read: if isAdmin() || isTenantMember(tenantId);
+        // Only trusted backend/Functions (Admin SDK) or authorized admin may create/modify events
+        allow create, update: if isAdmin()
+          && request.resource.data.tenantId == tenantId;
+        allow delete: if false;
+      }
+
+      // 5. Security Alerts Subcollection
+      match /security_alerts/{alertId} {
+        allow read: if isAdmin() || isTenantMember(tenantId);
+        allow create: if isAdmin() && request.resource.data.tenantId == tenantId;
+        allow update: if (isAdmin() || (isAnalyst() && isTenantMember(tenantId)))
+          && request.resource.data.tenantId == resource.data.tenantId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'acknowledgedBy', 'acknowledgedAt', 'resolvedAt', 'updatedAt'
+          ])
+          && request.resource.data.status in ['open', 'acknowledged', 'resolved'];
+        allow delete: if false;
+      }
+
+      // 6. Append-Only Immutable Audit Logs
+      match /audit_logs/{logId} {
+        allow read: if isAdmin() || isTenantMember(tenantId);
+        // Client updates/deletes are strictly forbidden (Admin SDK writes audit entries)
+        allow create, update, delete: if false;
+      }
+
+      // 7. Automated Security Response History
+      match /response_history/{respId} {
+        allow read: if isAdmin() || (isAnalyst() && isTenantMember(tenantId));
+        allow create: if isAdmin() && request.resource.data.tenantId == tenantId;
+        allow update: if isAdmin()
+          && request.resource.data.tenantId == resource.data.tenantId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'approvalStatus', 'approvedBy', 'approvedAt', 'executedAt', 'executionNote'
+          ]);
+        allow delete: if false;
+      }
+    }
+
+    // Top-level tenant_members lookup index
+    match /tenant_members/{memberId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // 8-10. Federated Learning, Model Benchmarks & Privacy Metrics
+    //       (Read-only for verified users; Admin SDK writes only)
+    // -------------------------------------------------------------------------
+    match /federated_rounds/{roundId} {
+      allow read: if isVerifiedActive();
+      allow write: if false;
+    }
+
+    match /model_metrics/{metricId} {
+      allow read: if isVerifiedActive();
+      allow write: if false;
+    }
+
+    match /privacy_metrics/{roundId} {
+      allow read: if isVerifiedActive();
+      allow write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // 11. Platform System Settings
+    // -------------------------------------------------------------------------
+    match /system_settings/{settingId} {
+      allow read: if isVerifiedActive();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Default Deny-All Fallback
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

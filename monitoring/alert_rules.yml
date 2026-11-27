@@ -1,0 +1,38 @@
+groups:
+  - name: cloud_security_alerts
+    rules:
+      - alert: CrossTenantDataLeakageAttempt
+        expr: increase(security_cross_tenant_access_denied_total[1m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Cross-tenant access boundary violation detected and blocked."
+          description: "An isolated tenant workspace attempted to probe or access foreign tenant storage."
+
+      - alert: HighThreatDetectionRate
+        expr: rate(threat_alerts_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: high
+        annotations:
+          summary: "Elevated threat detection frequency across tenants."
+          description: "Machine learning threat detection models are triggering alerts at high velocity."
+
+      - alert: PrivacyBudgetThresholdApproaching
+        expr: fl_privacy_epsilon_spent > 8.0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Federated Learning differential privacy budget nearly exhausted."
+          description: "Total epsilon spent exceeds 80% of configured privacy threshold (10.0)."
+
+      - alert: ByzantineOutlierGradientDetected
+        expr: fl_byzantine_filtered_updates_total > 0
+        for: 0m
+        labels:
+          severity: high
+        annotations:
+          summary: "Malicious or poisoning gradient update filtered by Krum/Median aggregator."
+          description: "A tenant client update deviated significantly from the consensus parameter distribution."

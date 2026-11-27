@@ -1,0 +1,89 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.env.local
+.venv
+venv*
+
+# Firebase secrets, caches, & emulators
+serviceAccountKey.json
+*firebase-adminsdk*.json
+google-services.json
+.firebase/
+firebase-debug*.log
+firestore-debug*.log
+ui-debug*.log
+database-debug*.log
+pubsub-debug*.log
+functions/node_modules/
+
+# TLS private keys & generated dev certificates
+certs/*.key
+certs/*.pem
+
+# Local encrypted artifacts fallback
+artifacts/
+
+# Testing, Coverage & Security Reports
+.pytest_cache/
+.coverage
+coverage.xml
+coverage_html/
+htmlcov/
+pytest-results.xml
+bandit-report.json
+semgrep-report.json
+safety-*.json
+trivy-*.sarif
+sbom*.json
+
+# Models & Checkpoints
+models/*.pt
+models/*.pth
+models/*.joblib
+metrics/*.json
+
+# Data files
+data/tenant_*/*.csv
+
+# Database
+*.sqlite3
+*.db
+
+# Logs
+logs/
+*.log
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
